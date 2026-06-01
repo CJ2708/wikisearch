@@ -32,11 +32,25 @@ USER_AGENT = _env(
     "WikiSearchEngine/1.0 (personal learning project; contact: you@example.com)",
 )
 
-# --- BM25 retrieval ---
+# --- Retrieval / ranking ---
 # Articles are chopped into passages of roughly this many words before ranking.
 PASSAGE_WORDS = int(_env("PASSAGE_WORDS", "120"))
 # How many top passages to keep as context for the answer.
-TOP_PASSAGES = int(_env("TOP_PASSAGES", "5"))
+TOP_PASSAGES = int(_env("TOP_PASSAGES", "6"))
+
+# Cap passages per article so huge pages (e.g. "World War II") don't generate
+# hundreds of chunks. Wikipedia front-loads the key facts, so the lead plus the
+# first several sections are what matter — and this keeps embedding fast.
+MAX_PASSAGES_PER_ARTICLE = int(_env("MAX_PASSAGES_PER_ARTICLE", "10"))
+
+# Semantic reranking: combine BM25 (lexical) with embedding similarity (meaning).
+# Set USE_EMBEDDINGS=false on very memory-constrained hosts to fall back to
+# lexical-only ranking (the model needs a few hundred MB of RAM).
+USE_EMBEDDINGS = _env("USE_EMBEDDINGS", "true").lower() in ("1", "true", "yes")
+EMBED_MODEL = _env("EMBED_MODEL", "BAAI/bge-small-en-v1.5")
+# Small extra weight for an article's lead/summary passage, where Wikipedia puts
+# the most direct answer to factual questions.
+LEAD_BOOST = float(_env("LEAD_BOOST", "0.015"))
 
 # --- RAG: which LLM backend generates the answer ---
 # "ollama" -> local model on your machine (great for development)
@@ -49,7 +63,9 @@ LLM_TIMEOUT = float(_env("LLM_TIMEOUT", "120"))
 
 # Local Ollama backend
 OLLAMA_URL = _env("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = _env("OLLAMA_MODEL", "llama3.2")
+# A 7B model gives far better grounded answers than a 3B one; override via env
+# if you need something lighter (e.g. OLLAMA_MODEL=llama3.2).
+OLLAMA_MODEL = _env("OLLAMA_MODEL", "qwen2.5:7b")
 
 # Groq cloud backend (OpenAI-compatible API). Get a free key at https://console.groq.com
 GROQ_API_KEY = _env("GROQ_API_KEY", "")

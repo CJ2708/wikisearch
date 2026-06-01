@@ -70,13 +70,18 @@ function renderResults(results) {
   results.forEach((r) => {
     const li = document.createElement("li");
     li.className = "result";
+    // Show semantic relevance as a percentage when available, else the fused score.
+    const badge =
+      r.relevance != null
+        ? `${Math.round(r.relevance * 100)}% match`
+        : `score ${r.score}`;
     li.innerHTML = `
       <div class="result-head">
         <div class="result-title">
           <span class="result-rank">#${r.rank}</span>
           <a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.title)}</a>
         </div>
-        <span class="score">BM25 ${r.score}</span>
+        <span class="score">${badge}</span>
       </div>
       <p class="snippet">${escapeHtml(r.text)}</p>
     `;

@@ -19,11 +19,17 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import config, rag, search, wikipedia_client
+from . import config, embeddings, rag, search, wikipedia_client
 
-app = FastAPI(title="Wikipedia Search Engine (BM25 + RAG)")
+app = FastAPI(title="Wikipedia Search Engine (Hybrid Retrieval + RAG)")
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+
+@app.on_event("startup")
+def _warm_up_models() -> None:
+    """Load the embedding model at startup so the first query isn't slow."""
+    embeddings.warm_up()
 
 
 class Query(BaseModel):
@@ -75,6 +81,7 @@ def api_health():
         "provider": config.active_provider(),
         "model": rag.active_model_name(),
         "llm_ready": rag.model_available(),
+        "semantic_ranking": embeddings.available(),
     }
 
 

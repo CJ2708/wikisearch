@@ -1,12 +1,23 @@
-# WikiSearch 
+---
+title: WikiSearch
+emoji: 🔍
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 8666
+pinned: false
+---
+
+<!-- The block above is read by Hugging Face Spaces when deploying there; it is
+     ignored when running locally or on other hosts. -->
+
+# WikiSearch — a hybrid search engine + RAG over Wikipedia
 
 A personal search engine that answers your questions using Wikipedia. You type a
-query; it finds relevant Wikipedia articles, ranks their passages with **BM25**
-(the classic search-engine ranking algorithm), and then a **local LLM (via
-Ollama)** writes a grounded, cited answer — Retrieval-Augmented Generation (RAG).
-
-No API keys, no cloud — everything runs on your machine except the read-only
-calls to Wikipedia's public API.
+query; it finds relevant Wikipedia articles, ranks their passages with a **hybrid
+of BM25 (lexical) and semantic embeddings (meaning)**, and then an **LLM (via
+Ollama or Groq)** writes a grounded, cited answer — Retrieval-Augmented
+Generation (RAG).
 
 ## How it works
 
@@ -14,30 +25,31 @@ calls to Wikipedia's public API.
   your query
       │
       ▼
-┌─────────────────────┐   1. Find candidate articles via the Wikipedia search API
-│  wikipedia_client   │      and download their plain-text content.
+┌─────────────────────┐   1. Expand the query into several searches, fetch the best
+│  wikipedia_client   │      candidate articles via the Wikipedia API, fuse results.
 └─────────────────────┘
       │  articles
       ▼
-┌─────────────────────┐   2. Split articles into ~120-word passages and rank them
-│   search (BM25)     │      with BM25 (term-frequency saturation + length norm).
+┌─────────────────────┐   2. Split into passages and rank them with a HYBRID of BM25
+│   search (hybrid)   │      (lexical) + embedding similarity (semantic), fused by RRF.
 └─────────────────────┘
       │  top passages
       ▼
-┌─────────────────────┐   3. Feed the top passages to a local Ollama model and ask
-│   rag (Ollama)      │      it to answer using ONLY those sources, with [n] cites.
+┌─────────────────────┐   3. Feed the top passages to the LLM (Ollama or Groq) and ask
+│   rag (LLM)         │      it to answer using ONLY those sources, with [n] cites.
 └─────────────────────┘
       │  grounded answer + sources
       ▼
    web UI  (static/)
 ```
 
-| Layer       | Tech                                                   |
-|-------------|--------------------------------------------------------|
-| Backend     | Python + FastAPI                                       |
-| Retrieval   | Multi-query expansion + `rank-bm25` over passages      |
-| Generation  | Pluggable: **Ollama** (local) or **Groq** (cloud)      |
-| Frontend    | Vanilla HTML/CSS/JS (no build step)                    |
+| Layer       | Tech                                                       |
+|-------------|------------------------------------------------------------|
+| Backend     | Python + FastAPI                                           |
+| Retrieval   | Multi-query expansion + **hybrid BM25 + embeddings (RRF)** |
+| Embeddings  | `fastembed` (ONNX, `BAAI/bge-small-en-v1.5`) — no PyTorch  |
+| Generation  | Pluggable: **Ollama** (local) or **Groq** (cloud)         |
+| Frontend    | Vanilla HTML/CSS/JS (no build step)                        |
 
 ### Pluggable LLM backend
 
@@ -100,41 +112,51 @@ environment variables, e.g.:
 OLLAMA_MODEL=llama3.1:8b CANDIDATE_ARTICLES=8 TOP_PASSAGES=6 ./run.sh
 ```
 
-| Variable             | Default                   | Meaning                                          |
-|----------------------|---------------------------|--------------------------------------------------|
-| `LLM_PROVIDER`       | `auto`                    | `ollama`, `groq`, or `auto`.                     |
-| `GROQ_API_KEY`       | _(empty)_                 | Your Groq key (enables the cloud backend).       |
-| `GROQ_MODEL`         | `llama-3.3-70b-versatile` | Which Groq model generates answers.              |
-| `OLLAMA_MODEL`       | `llama3.2`                | Which Ollama model generates answers.            |
-| `CANDIDATE_ARTICLES` | `8`                       | Articles pulled from Wikipedia per query.        |
-| `PASSAGE_WORDS`      | `120`                     | Approx. words per rankable passage.              |
-| `TOP_PASSAGES`       | `5`                       | Passages kept as context / shown as sources.     |
-| `WIKI_LANG`          | `en`                      | Wikipedia language edition.                      |
+| Variable                   | Default                   | Meaning                                          |
+|----------------------------|---------------------------|--------------------------------------------------|
+| `LLM_PROVIDER`             | `auto`                    | `ollama`, `groq`, or `auto`.                     |
+| `GROQ_API_KEY`             | _(empty)_                 | Your Groq key (enables the cloud backend).       |
+| `GROQ_MODEL`               | `llama-3.3-70b-versatile` | Which Groq model generates answers.              |
+| `OLLAMA_MODEL`             | `qwen2.5:7b`              | Which Ollama model generates answers.            |
+| `USE_EMBEDDINGS`           | `true`                    | Hybrid semantic ranking (needs ~400 MB RAM).     |
+| `EMBED_MODEL`              | `BAAI/bge-small-en-v1.5`  | The embedding model used for semantic ranking.   |
+| `CANDIDATE_ARTICLES`       | `8`                       | Articles pulled from Wikipedia per query.        |
+| `MAX_PASSAGES_PER_ARTICLE` | `10`                      | Caps chunks from huge articles (keeps it fast).  |
+| `TOP_PASSAGES`             | `6`                       | Passages kept as context / shown as sources.     |
+| `WIKI_LANG`                | `en`                      | Wikipedia language edition.                      |
 
 For local development you can put these in a `.env` file (see `.env.example`).
 
 ## Deploy it live (free)
 
-GitHub stores the code; a host runs it. The retrieval (Wikipedia + BM25) runs
-anywhere, but a local Ollama model can't be hosted cheaply — so the live version
-uses the **Groq** backend instead.
+GitHub stores the code; a host runs it. A local Ollama model can't be hosted
+cheaply, so the live version uses the **Groq** backend. Get a free key first at
+<https://console.groq.com/keys>, then push this repo to GitHub.
 
-**1. Get a free Groq API key** at <https://console.groq.com/keys>.
+### Recommended: Hugging Face Spaces (16 GB RAM free)
 
-**2. Push this repo to GitHub** (see below).
+Because the semantic ranking loads an embedding model (~400 MB RAM), the best
+free host is **[Hugging Face Spaces](https://huggingface.co/spaces)** — generous
+RAM and built for ML demos. The repo already includes the Space config (the YAML
+header in this README + the [`Dockerfile`](Dockerfile)).
 
-**3. Deploy on [Render](https://render.com) (easiest):**
-   - New → **Blueprint** → pick your GitHub repo. Render reads
-     [`render.yaml`](render.yaml) and provisions the service.
-   - In the service's **Environment** tab, set `GROQ_API_KEY` to your key.
-   - Open the generated `*.onrender.com` URL — it's live.
+1. Create a **New Space** → **Docker** (blank).
+2. Push this repo to the Space (or link the GitHub repo).
+3. In **Settings → Variables and secrets**, add `GROQ_API_KEY` (and
+   `LLM_PROVIDER=groq`). Open the Space URL — full hybrid quality, live.
 
-   _(The included [`Dockerfile`](Dockerfile) also works on Hugging Face Spaces,
-   Fly.io, or Railway if you prefer those.)_
+### Alternative: Render (free tier is only 512 MB RAM)
+
+Render's free instance is too small for the embedding model, so semantic ranking
+is disabled there (it falls back to lexical-only). The included
+[`render.yaml`](render.yaml) sets `USE_EMBEDDINGS=false` to keep it from
+crashing. New → **Blueprint** → pick the repo, set `GROQ_API_KEY` in the
+**Environment** tab. For full quality on Render, use a paid instance and set
+`USE_EMBEDDINGS=true`.
 
 ## Ideas to extend it
 
-- Add **semantic re-ranking** (embeddings) on top of BM25 for a hybrid retriever.
-- Cache fetched articles so repeat queries are instant.
+- Cache fetched articles + their embeddings so repeat queries are instant.
+- Add a cross-encoder re-ranker for an even sharper top result.
 - Stream the LLM answer token-by-token to the UI.
 - Swap Wikipedia for your own document corpus to make it a private knowledge search.

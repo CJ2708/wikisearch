@@ -22,5 +22,11 @@ services:
         value: groq
       - key: GROQ_MODEL
         value: llama-3.3-70b-versatile
+      # The free plan has only 512 MB RAM — too little for the embedding model,
+      # so semantic ranking is disabled here to avoid OOM crashes (falls back to
+      # lexical ranking). For full hybrid quality, deploy on Hugging Face Spaces
+      # (16 GB free), or use a paid Render instance and set this to "true".
+      - key: USE_EMBEDDINGS
+        value: "false"
       - key: GROQ_API_KEY
         sync: false        # set this secret in the Render dashboard, not in git
