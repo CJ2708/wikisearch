@@ -1,4 +1,4 @@
-# WikiSearch — a BM25 + RAG search engine over Wikipedia
+# WikiSearch 
 
 A personal search engine that answers your questions using Wikipedia. You type a
 query; it finds relevant Wikipedia articles, ranks their passages with **BM25**
