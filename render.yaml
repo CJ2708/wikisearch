@@ -1,0 +1,26 @@
+# Render blueprint — deploy this app live for free.
+#
+# How to use:
+#   1. Push this repo to GitHub.
+#   2. Go to https://dashboard.render.com -> New -> Blueprint, pick this repo.
+#   3. Render reads this file and creates the web service automatically.
+#   4. In the service's "Environment" tab, paste your GROQ_API_KEY value
+#      (it is intentionally NOT stored in the repo).
+#
+# The free plan sleeps after inactivity and wakes on the next request.
+services:
+  - type: web
+    name: wikisearch
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: LLM_PROVIDER
+        value: groq
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: GROQ_API_KEY
+        sync: false        # set this secret in the Render dashboard, not in git

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WikiSearch — BM25 + RAG</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <h1 class="logo">Wiki<span>Search</span></h1>
+      <p class="tagline">Ask anything &mdash; answered from Wikipedia with BM25 ranking + local RAG</p>
+    </header>
+
+    <form id="search-form" class="search-bar" autocomplete="off">
+      <input
+        id="query"
+        type="text"
+        placeholder="e.g. How does the BM25 ranking algorithm work?"
+        aria-label="Search query"
+        required
+      />
+      <button type="submit" id="submit-btn">Search</button>
+    </form>
+
+    <div class="options">
+      <label class="toggle">
+        <input type="checkbox" id="rag-toggle" checked />
+        <span>Generate an AI answer (RAG)</span>
+      </label>
+      <span id="status-pill" class="pill" title="Ollama status">checking…</span>
+    </div>
+
+    <section id="loading" class="loading hidden">
+      <div class="spinner"></div>
+      <span id="loading-text">Searching Wikipedia…</span>
+    </section>
+
+    <section id="answer-section" class="answer-card hidden">
+      <h2>Answer</h2>
+      <div id="answer-text" class="answer-text"></div>
+      <p class="meta" id="answer-meta"></p>
+    </section>
+
+    <section id="results-section" class="results hidden">
+      <h2 id="results-heading">Top passages (BM25-ranked)</h2>
+      <ul id="results-list"></ul>
+    </section>
+
+    <section id="error-box" class="error hidden"></section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
