@@ -29,8 +29,12 @@ CANDIDATE_ARTICLES = int(_env("CANDIDATE_ARTICLES", "8"))
 # Be a good API citizen: Wikipedia asks for a descriptive User-Agent.
 USER_AGENT = _env(
     "USER_AGENT",
-    "WikiSearchEngine/1.0 (personal learning project; contact: you@example.com)",
+    "WikiSearchEngine/1.0 (https://huggingface.co/spaces/CJ2708/wikisearch)",
 )
+# Resilience against Wikipedia's rate limiting (429), which is common on shared
+# cloud IPs: retry with backoff, and cap how many requests we fire at once.
+WIKI_MAX_RETRIES = int(_env("WIKI_MAX_RETRIES", "4"))
+WIKI_MAX_CONCURRENCY = int(_env("WIKI_MAX_CONCURRENCY", "3"))
 
 # --- Retrieval / ranking ---
 # Articles are chopped into passages of roughly this many words before ranking.

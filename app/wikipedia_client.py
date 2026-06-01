@@ -5,6 +5,7 @@ lean on Wikipedia's own search API to find a handful of relevant articles, then
 download their plain-text content. BM25 (in search.py) does the real ranking
 afterwards over the passages of these articles.
 """
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Optional
 
@@ -21,10 +22,35 @@ def _client() -> httpx.Client:
     )
 
 
+def _api_get(client: httpx.Client, params: dict) -> Optional[dict]:
+    """GET the Wikipedia API with retry/backoff; return JSON or None.
+
+    Wikipedia rate-limits anonymous traffic from shared/datacenter IPs (common on
+    cloud hosts), returning 429. We retry with exponential backoff, respecting any
+    Retry-After header, and on persistent failure return None so the caller can
+    degrade gracefully instead of crashing the request.
+    """
+    delay = 0.5
+    for attempt in range(config.WIKI_MAX_RETRIES):
+        try:
+            resp = client.get(config.WIKI_API_URL, params=params)
+            if resp.status_code in (429, 503):
+                wait = float(resp.headers.get("Retry-After", delay))
+                time.sleep(min(wait, 5.0))
+                delay *= 2
+                continue
+            resp.raise_for_status()
+            return resp.json()
+        except (httpx.HTTPError, ValueError):
+            time.sleep(delay)
+            delay *= 2
+    return None
+
+
 def search_titles(query: str, limit: int) -> List[str]:
     """Ask Wikipedia which article titles best match the query.
 
-    Returns a list of page titles, most relevant first.
+    Returns a list of page titles (most relevant first), or [] on failure.
     """
     params = {
         "action": "query",
@@ -35,9 +61,9 @@ def search_titles(query: str, limit: int) -> List[str]:
         "format": "json",
     }
     with _client() as client:
-        resp = client.get(config.WIKI_API_URL, params=params)
-        resp.raise_for_status()
-        data = resp.json()
+        data = _api_get(client, params)
+    if not data:
+        return []
     hits = data.get("query", {}).get("search", [])
     return [hit["title"] for hit in hits]
 
@@ -59,9 +85,10 @@ def _fetch_one_extract(client: httpx.Client, title: str) -> Optional[Dict[str, s
         "redirects": "1",       # follow redirects to the canonical article
         "format": "json",
     }
-    resp = client.get(config.WIKI_API_URL, params=params)
-    resp.raise_for_status()
-    pages = resp.json().get("query", {}).get("pages", {})
+    data = _api_get(client, params)
+    if not data:
+        return None
+    pages = data.get("query", {}).get("pages", {})
     for page in pages.values():
         text = (page.get("extract") or "").strip()
         if not text:
@@ -84,8 +111,11 @@ def fetch_extracts(titles: List[str]) -> List[Dict[str, str]]:
     if not titles:
         return []
 
+    # Cap concurrency to stay polite: too many simultaneous requests from one IP
+    # trips Wikipedia's rate limiter (429), especially on shared cloud hosts.
+    workers = min(config.WIKI_MAX_CONCURRENCY, len(titles))
     with _client() as client:
-        with ThreadPoolExecutor(max_workers=len(titles)) as pool:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
             fetched = list(pool.map(lambda t: _fetch_one_extract(client, t), titles))
 
     # Keep input (relevance) order and drop the empties.
@@ -129,7 +159,8 @@ def _gather_titles(query: str) -> List[str]:
     limit = config.CANDIDATE_ARTICLES
     variants = _expand_queries(query)
 
-    with ThreadPoolExecutor(max_workers=len(variants)) as pool:
+    workers = min(config.WIKI_MAX_CONCURRENCY, len(variants))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
         result_sets = list(pool.map(lambda q: search_titles(q, limit), variants))
 
     scores: Dict[str, float] = {}
