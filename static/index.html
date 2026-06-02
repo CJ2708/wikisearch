@@ -25,11 +25,17 @@
     </form>
 
     <div class="options">
-      <label class="toggle">
-        <input type="checkbox" id="rag-toggle" checked />
-        <span>Generate an AI answer (RAG)</span>
-      </label>
-      <span id="status-pill" class="pill" title="Ollama status">checking…</span>
+      <div class="options-left">
+        <div class="segmented" id="source-toggle" role="group" aria-label="Search source">
+          <button type="button" class="seg active" data-source="web">🌐 Web</button>
+          <button type="button" class="seg" data-source="wikipedia">📖 Wikipedia</button>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="rag-toggle" checked />
+          <span>AI answer (RAG)</span>
+        </label>
+      </div>
+      <span id="status-pill" class="pill" title="Backend status">checking…</span>
     </div>
 
     <section id="loading" class="loading hidden">

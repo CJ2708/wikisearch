@@ -5,6 +5,17 @@ const queryInput = document.getElementById("query");
 const submitBtn = document.getElementById("submit-btn");
 const ragToggle = document.getElementById("rag-toggle");
 const statusPill = document.getElementById("status-pill");
+const sourceToggle = document.getElementById("source-toggle");
+
+// Currently selected search source ("web" or "wikipedia").
+let currentSource = "web";
+
+sourceToggle.addEventListener("click", (e) => {
+  const btn = e.target.closest(".seg");
+  if (!btn) return;
+  currentSource = btn.dataset.source;
+  sourceToggle.querySelectorAll(".seg").forEach((b) => b.classList.toggle("active", b === btn));
+});
 
 const loading = document.getElementById("loading");
 const loadingText = document.getElementById("loading-text");
@@ -49,6 +60,19 @@ async function checkHealth() {
   try {
     const res = await fetch("/api/health");
     const data = await res.json();
+
+    // Reflect the real default source; if web search has no key, steer to Wikipedia.
+    currentSource = data.default_source || "web";
+    const webBtn = sourceToggle.querySelector('[data-source="web"]');
+    const wikiBtn = sourceToggle.querySelector('[data-source="wikipedia"]');
+    if (!data.web_search) {
+      webBtn.title = "Set a TAVILY_API_KEY to enable web search";
+      webBtn.style.opacity = "0.5";
+    }
+    sourceToggle.querySelectorAll(".seg").forEach((b) =>
+      b.classList.toggle("active", b.dataset.source === currentSource)
+    );
+
     if (data.llm_ready) {
       statusPill.textContent = `${data.model} ✓`;
       statusPill.className = "pill ready";
@@ -107,7 +131,7 @@ async function runSearch(query) {
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, source: currentSource }),
     });
 
     if (!res.ok) {
