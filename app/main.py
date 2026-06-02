@@ -1,77 +1,57 @@
 """FastAPI backend wiring the search pipeline together.
 
 Pipeline for a query:
-    1. fetch candidate documents  -> web (Tavily) OR Wikipedia, per `source`
-    2. search.PassageIndex        -> hybrid (BM25 + embeddings) + cross-encoder rerank
-    3. rag.generate_answer        -> grounded, cited answer via Ollama or Groq
+    1. wikipedia_client.get_candidate_articles  -> fetch relevant articles
+    2. search.PassageIndex                       -> BM25-rank their passages
+    3. rag.generate_answer                       -> grounded answer via Ollama
 
 Endpoints:
     GET  /                -> the web UI (static/index.html)
-    POST /api/search      -> ranked passages only (fast, no LLM)
-    POST /api/ask         -> retrieval + RAG answer (the full experience)
-    GET  /api/health      -> dependency status (LLM, embeddings, sources)
+    POST /api/search      -> BM25 results only (fast, no LLM)
+    POST /api/ask         -> BM25 retrieval + RAG answer (the full experience)
+    GET  /api/health      -> dependency status (Ollama reachable, model pulled)
 """
 import time
 from pathlib import Path
-from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import config, embeddings, rag, reranker, search, web_search, wikipedia_client
+from . import config, embeddings, rag, search, wikipedia_client
 
-app = FastAPI(title="Search Engine (Web + Wikipedia, Hybrid Retrieval + RAG)")
+app = FastAPI(title="Wikipedia Search Engine (Hybrid Retrieval + RAG)")
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 @app.on_event("startup")
 def _warm_up_models() -> None:
-    """Load the ML models at startup so the first query isn't slow."""
+    """Load the embedding model at startup so the first query isn't slow."""
     embeddings.warm_up()
-    reranker.warm_up()
 
 
 class Query(BaseModel):
     query: str = Field(..., min_length=1, max_length=500)
-    # "web" (Tavily) or "wikipedia"; falls back to the configured default.
-    source: Optional[str] = None
 
 
-def _resolve_source(requested: Optional[str]) -> str:
-    """Pick the source: honor the request, else default; fall back if unusable."""
-    source = (requested or config.SEARCH_SOURCE).lower()
-    if source == "web" and not web_search.available():
-        return "wikipedia"   # no Tavily key configured -> use Wikipedia
-    return source
-
-
-def _fetch_documents(query: str, source: str):
-    if source == "wikipedia":
-        return wikipedia_client.get_candidate_articles(query)
-    return web_search.get_candidate_documents(query)
-
-
-def _retrieve(query: str, source: str):
-    """Shared retrieval: fetch candidate docs, then hybrid-rank + rerank passages."""
-    documents = _fetch_documents(query, source)
-    index = search.PassageIndex(documents)
+def _retrieve(query: str):
+    """Shared retrieval stage: fetch candidate articles, BM25-rank passages."""
+    articles = wikipedia_client.get_candidate_articles(query)
+    index = search.PassageIndex(articles)
     passages = index.search(query, config.TOP_PASSAGES)
-    return documents, passages
+    return articles, passages
 
 
 @app.post("/api/search")
 def api_search(q: Query):
-    """Return ranked passages without invoking the LLM (fast path)."""
+    """Return BM25-ranked passages without invoking the LLM (fast path)."""
     started = time.perf_counter()
-    source = _resolve_source(q.source)
-    documents, passages = _retrieve(q.query, source)
+    articles, passages = _retrieve(q.query)
     return {
         "query": q.query,
-        "source": source,
-        "articles_considered": len(documents),
+        "articles_considered": len(articles),
         "results": passages,
         "took_ms": round((time.perf_counter() - started) * 1000),
     }
@@ -81,15 +61,13 @@ def api_search(q: Query):
 def api_ask(q: Query):
     """Full RAG: retrieve passages, then generate a grounded, cited answer."""
     started = time.perf_counter()
-    source = _resolve_source(q.source)
-    documents, passages = _retrieve(q.query, source)
+    articles, passages = _retrieve(q.query)
     generation = rag.generate_answer(q.query, passages)
     return {
         "query": q.query,
-        "source": source,
         "answer": generation["answer"],
         "error": generation["error"],
-        "articles_considered": len(documents),
+        "articles_considered": len(articles),
         "sources": passages,
         "model": rag.active_model_name(),
         "took_ms": round((time.perf_counter() - started) * 1000),
@@ -104,9 +82,6 @@ def api_health():
         "model": rag.active_model_name(),
         "llm_ready": rag.model_available(),
         "semantic_ranking": embeddings.available(),
-        "reranker": reranker.available(),
-        "web_search": web_search.available(),
-        "default_source": _resolve_source(None),
     }
 
 

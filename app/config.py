@@ -20,18 +20,6 @@ def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
-# --- Search source ---
-# Where candidate documents come from per query: "web" (Tavily) or "wikipedia".
-# This is the default; the API/UI can override it per request.
-SEARCH_SOURCE = _env("SEARCH_SOURCE", "web").lower()
-
-# --- Web search (Tavily — https://app.tavily.com for a free key) ---
-TAVILY_API_KEY = _env("TAVILY_API_KEY", "")
-TAVILY_URL = _env("TAVILY_URL", "https://api.tavily.com/search")
-TAVILY_MAX_RESULTS = int(_env("TAVILY_MAX_RESULTS", "6"))
-# "basic" is fast and free-tier friendly; "advanced" digs deeper (costs more).
-TAVILY_SEARCH_DEPTH = _env("TAVILY_SEARCH_DEPTH", "basic")
-
 # --- Wikipedia source ---
 WIKI_LANG = _env("WIKI_LANG", "en")
 WIKI_API_URL = f"https://{WIKI_LANG}.wikipedia.org/w/api.php"
@@ -67,13 +55,6 @@ EMBED_MODEL = _env("EMBED_MODEL", "BAAI/bge-small-en-v1.5")
 # Small extra weight for an article's lead/summary passage, where Wikipedia puts
 # the most direct answer to factual questions.
 LEAD_BOOST = float(_env("LEAD_BOOST", "0.015"))
-
-# Cross-encoder reranking: a precise second pass that re-scores the top hybrid
-# candidates for sharper ordering. Disable on tiny hosts to save RAM/latency.
-USE_RERANKER = _env("USE_RERANKER", "true").lower() in ("1", "true", "yes")
-RERANK_MODEL = _env("RERANK_MODEL", "Xenova/ms-marco-MiniLM-L-6-v2")
-# How many top hybrid candidates to feed the (slower) cross-encoder.
-RERANK_CANDIDATES = int(_env("RERANK_CANDIDATES", "15"))
 
 # --- RAG: which LLM backend generates the answer ---
 # "ollama" -> local model on your machine (great for development)

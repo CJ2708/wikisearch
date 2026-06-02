@@ -79,34 +79,10 @@ body {
   align-items: center;
   justify-content: space-between;
   margin: 14px 4px 0;
-  gap: 12px;
 }
-.options-left { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 
 .toggle { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; cursor: pointer; }
 .toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
-
-/* Segmented Web/Wikipedia source switch */
-.segmented {
-  display: inline-flex;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 3px;
-}
-.seg {
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: 7px;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.seg:hover { color: var(--text); }
-.seg.active { background: var(--accent); color: #fff; }
 
 .pill {
   font-size: 12px;

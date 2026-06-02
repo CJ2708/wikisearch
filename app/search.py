@@ -18,7 +18,7 @@ from typing import List, Dict
 import numpy as np
 from rank_bm25 import BM25Okapi
 
-from . import config, embeddings, reranker
+from . import config, embeddings
 
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -152,33 +152,16 @@ class PassageIndex:
 
         fused.sort(key=lambda x: x[0], reverse=True)
 
-        # Keep the strongest candidates, dropping passages that match no signal.
-        candidates = [
-            (score, idx)
-            for score, idx in fused
-            if bm25_scores[idx] > 0 or (sem_scores is not None and sem_scores[idx] > 0.2)
-        ]
-
-        # Precision pass: rerank the top hybrid candidates with the cross-encoder,
-        # which reads (query, passage) jointly and orders them more accurately.
-        rerank_scores: Dict[int, float] = {}
-        if reranker.available():
-            pool = candidates[: config.RERANK_CANDIDATES]
-            scores = reranker.rerank_scores(query, [self.passages[i]["text"] for _, i in pool])
-            if scores is not None:
-                rerank_scores = {idx: float(s) for (_, idx), s in zip(pool, scores)}
-                # Sort the reranked pool by cross-encoder score; keep the rest after.
-                pool.sort(key=lambda x: rerank_scores[x[1]], reverse=True)
-                candidates = pool + candidates[config.RERANK_CANDIDATES:]
-
         results: List[Dict] = []
-        for rank, (score, idx) in enumerate(candidates[:top_k], start=1):
+        for rank, (score, idx) in enumerate(fused[:top_k], start=1):
+            # Drop passages that match on neither signal at all.
+            if bm25_scores[idx] <= 0 and (sem_scores is None or sem_scores[idx] <= 0.2):
+                continue
             passage = self.passages[idx]
             results.append(
                 {
                     "rank": rank,
                     "score": round(float(score), 4),
-                    "rerank_score": round(rerank_scores[idx], 3) if idx in rerank_scores else None,
                     "relevance": round(float(sem_scores[idx]), 3) if sem_scores is not None else None,
                     "title": passage["title"],
                     "url": passage["url"],
